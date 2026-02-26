@@ -95,7 +95,13 @@ app.get("/", (req, res) => {
 
 // Get Queue Status
 app.get("/status", (req, res) => {
-  const data = JSON.parse(fs.readFileSync(file));
+  let data;
+
+  try {
+    data = JSON.parse(fs.readFileSync(file));
+  } catch (err) {
+    data = { current: 0, lastToken: 0 };
+  }
 
   const waitingPatients = data.lastToken - data.current;
 
@@ -108,14 +114,20 @@ app.get("/status", (req, res) => {
 
 // Take Token (Patient)
 app.post("/token", (req, res) => {
-  const data = JSON.parse(fs.readFileSync(file));
+  let data;
 
-  data.lastToken += 1;
+  try {
+    data = JSON.parse(fs.readFileSync(file));
+  } catch (err) {
+    data = { current: 0, lastToken: 0 };
+  }
+
+  data.lastToken = (data.lastToken || 0) + 1;
 
   fs.writeFileSync(file, JSON.stringify(data));
 
   const queuePosition = data.lastToken - data.current;
-  const estimatedWaitingTime = queuePosition * 5; // 5 minutes per patient
+  const estimatedWaitingTime = queuePosition * 5;
 
   res.json({
     tokenNumber: data.lastToken,
@@ -123,7 +135,6 @@ app.post("/token", (req, res) => {
     estimatedWaitingTime: estimatedWaitingTime,
   });
 });
-
 // Doctor Calls Next
 app.post("/next", requireRole("doctor"), (req, res) => {
   const data = JSON.parse(fs.readFileSync(file));
