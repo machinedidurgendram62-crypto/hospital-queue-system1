@@ -2,33 +2,21 @@ function getToken() {
   fetch("/token", { method: "POST" })
     .then(res => res.json())
     .then(data => {
-      document.getElementById("myToken").innerText =
-        "Your Token Number: " + data.token;
+      document.getElementById("myToken").innerText = data.tokenNumber;
+      document.getElementById("queuePosition").innerText = data.queuePosition;
+      document.getElementById("waitingTime").innerText =
+        data.estimatedWaitingTime + " minutes";
     });
 }
 
-function callNext() {
-  fetch("/next", { method: "POST" })
-    .then(res => res.json())
-    .then(updateDisplay);
-}
-
-function resetQueue() {
-  fetch("/reset", { method: "POST" })
-    .then(res => res.json())
-    .then(updateDisplay);
-}
-
-function updateDisplay(data) {
-  if (document.getElementById("currentDisplay")) {
-    document.getElementById("currentDisplay").innerText =
-      "Now Serving Token: " + data.current;
-  }
-}
-
-// Auto refresh current token every 2 seconds
-setInterval(() => {
+function loadStatus() {
   fetch("/status")
     .then(res => res.json())
-    .then(updateDisplay);
-}, 2000);
+    .then(data => {
+      document.getElementById("currentDisplay").innerText =
+        data.currentToken;
+    });
+}
+
+setInterval(loadStatus, 3000);
+loadStatus();

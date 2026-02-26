@@ -1,22 +1,31 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Patient - Hospital Queue</title>
+  <title>Patient Dashboard - Hospital Queue</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <h1>Hospital Queue System</h1>
+  <div class="container">
+    <h1>🏥 Hospital Queue System</h1>
 
-  <div class="card">
-    <button onclick="getToken()">Get Token</button>
-    <h2 id="myToken"></h2>
-    <h3 id="currentDisplay"></h3>
-  </div>
+    <div class="card">
+      <button onclick="getToken()" class="primary-btn">
+        Get Token
+      </button>
 
-  <div class="nav">
-    <a href="/doctor.html">Doctor Panel</a>
-    <a href="/staff.html">Staff Panel</a>
+      <div class="info-box">
+        <h2>Your Token: <span id="myToken">-</span></h2>
+        <h3>Now Serving: <span id="currentDisplay">-</span></h3>
+        <h3>Queue Position: <span id="queuePosition">-</span></h3>
+        <h3>Estimated Waiting Time: <span id="waitingTime">-</span></h3>
+      </div>
+    </div>
+
+    <div class="nav">
+      <a href="/doctor.html" class="link-btn">Doctor Panel</a>
+      <a href="/staff.html" class="link-btn">Staff Panel</a>
+    </div>
   </div>
 
   <script src="script.js"></script>
