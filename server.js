@@ -17,6 +17,16 @@ app.use(
     saveUninitialized: true,
   })
 );
+// Role Middleware
+function requireRole(role) {
+  return (req, res, next) => {
+    if (req.session.user && req.session.user.role === role) {
+      next();
+    } else {
+      res.redirect("/login");
+    }
+  };
+}
 
 // Dummy Users
 const users = [
@@ -60,23 +70,26 @@ app.get("/logout", (req, res) => {
 });
 
 // Protect Doctor Page
-app.get("/doctor", (req, res) => {
-  if (req.session.user && req.session.user.role === "doctor") {
-    res.sendFile(path.join(__dirname, "public", "doctor.html"));
-  } else {
-    res.redirect("/login");
-  }
+app.get("/doctor", requireRole("doctor"), (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "doctor.html"));
 });
 
 // Protect Staff Page
-app.get("/staff", (req, res) => {
-  if (req.session.user && req.session.user.role === "staff") {
-    res.sendFile(path.join(__dirname, "public", "staff.html"));
+app.get("/staff", requireRole("staff"), (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "staff.html"));
+});
+app.get("/me", (req, res) => {
+  if (req.session.user) {
+    res.json(req.session.user);
   } else {
-    res.redirect("/login");
+    res.json(null);
   }
 });
-
+app.post("/reset", requireRole("staff"), (req, res) => {
+  const data = { current: 0, lastToken: 0 };
+  fs.writeFileSync(file, JSON.stringify(data));
+  res.json({ success: true });
+});
 // Redirect Home to Login
 app.get("/", (req, res) => {
   res.redirect("/login");
