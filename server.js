@@ -1,57 +1,46 @@
-const express = require("express");
 const session = require("express-session");
+const express = require("express");
 const fs = require("fs");
-const path = require("path");
 const cors = require("cors");
+const path = require("path");
 
 const app = express();
-
-// ================= MIDDLEWARE =================
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Important for Render
-app.set("trust proxy", 1);
 
 app.use(
   session({
     secret: "hospital_secret_key",
     resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: false,
-      httpOnly: true,
-    },
+    saveUninitialized: true,
   })
 );
 
-// ================= USERS =================
+// Hardcoded users
 const users = [
   { username: "doctor", password: "123", role: "doctor" },
   { username: "staff", password: "123", role: "staff" },
 ];
 
-// ================= ROLE MIDDLEWARE =================
-function requireRole(role) {
-  return (req, res, next) => {
-    if (req.session.user && req.session.user.role === role) {
-      next();
-    } else {
-      res.redirect("/login");
-    }
-  };
-}
-
-// ================= STATIC FILES =================
+// Serve frontend
 app.use(express.static(path.join(__dirname, "public")));
 
 const file = "./queue.json";
 
-// ================= LOGIN ROUTES =================
-app.get("/login", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "login.html"));
-});
+// Helper function
+function getData() {
+  try {
+    return JSON.parse(fs.readFileSync(file));
+  } catch {
+    return { current: 0, lastToken: 0 };
+  }
+}
+
+function saveData(data) {
+  fs.writeFileSync(file, JSON.stringify(data));
+}
+
+/* ---------------- LOGIN ---------------- */
 
 app.post("/login", (req, res) => {
   const { username, password } = req.body;
@@ -62,69 +51,36 @@ app.post("/login", (req, res) => {
 
   if (user) {
     req.session.user = user;
-    return res.json({ success: true, role: user.role });
+    res.json({ success: true, role: user.role });
   } else {
-    return res.json({ success: false });
+    res.json({ success: false });
   }
 });
 
 app.get("/logout", (req, res) => {
-  req.session.destroy(() => {
-    res.redirect("/login");
-  });
+  req.session.destroy();
+  res.redirect("/login.html");
 });
 
-app.get("/me", (req, res) => {
-  res.json(req.session.user || null);
-});
+/* ---------------- QUEUE ---------------- */
 
-// ================= PROTECTED ROUTES =================
-app.get("/doctor", requireRole("doctor"), (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "doctor.html"));
-});
-
-app.get("/staff", requireRole("staff"), (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "staff.html"));
-});
-
-app.get("/", (req, res) => {
-  res.redirect("/login");
-});
-
-// ================= QUEUE LOGIC =================
-
-// Get Queue Status
+// Get queue status
 app.get("/status", (req, res) => {
-  let data;
-
-  try {
-    data = JSON.parse(fs.readFileSync(file));
-  } catch (err) {
-    data = { current: 0, lastToken: 0 };
-  }
-
-  const waitingPatients = data.lastToken - data.current;
+  const data = getData();
 
   res.json({
     currentToken: data.current,
     lastToken: data.lastToken,
-    waitingPatients: waitingPatients,
+    waitingPatients: data.lastToken - data.current,
   });
 });
 
-// Take Token (Patient)
+// Take token
 app.post("/token", (req, res) => {
-  let data;
+  const data = getData();
 
-  try {
-    data = JSON.parse(fs.readFileSync(file));
-  } catch (err) {
-    data = { current: 0, lastToken: 0 };
-  }
-
-  data.lastToken = (data.lastToken || 0) + 1;
-
-  fs.writeFileSync(file, JSON.stringify(data));
+  data.lastToken += 1;
+  saveData(data);
 
   const queuePosition = data.lastToken - data.current;
   const estimatedWaitingTime = queuePosition * 5;
@@ -135,13 +91,14 @@ app.post("/token", (req, res) => {
     estimatedWaitingTime: estimatedWaitingTime,
   });
 });
-// Doctor Calls Next
-app.post("/next", requireRole("doctor"), (req, res) => {
-  const data = JSON.parse(fs.readFileSync(file));
+
+// Call next patient (Doctor/Staff)
+app.post("/next", (req, res) => {
+  const data = getData();
 
   if (data.current < data.lastToken) {
     data.current += 1;
-    fs.writeFileSync(file, JSON.stringify(data));
+    saveData(data);
   }
 
   res.json({
@@ -149,15 +106,6 @@ app.post("/next", requireRole("doctor"), (req, res) => {
   });
 });
 
-// Staff Reset Queue
-app.post("/reset", requireRole("staff"), (req, res) => {
-  const newData = { current: 0, lastToken: 0 };
-  fs.writeFileSync(file, JSON.stringify(newData));
-
-  res.json({ success: true });
-});
-
-// ================= SERVER =================
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
