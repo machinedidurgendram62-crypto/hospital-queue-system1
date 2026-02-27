@@ -1,29 +1,24 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Doctor Panel</title>
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <div class="header">
-  <h2>Hospital Queue System</h2>
-  <div>
-    <span id="username"></span>
-    <a href="/logout">Logout</a>
-  </div>
-</div>
+<h2>Doctor Dashboard</h2>
 
-  <h1>Doctor Panel</h1>
+<h3>Department Appointments</h3>
+<ul id="appointments"></ul>
 
-  <div class="card">
-    <button onclick="callNext()">Call Next Patient</button>
-    <h2 id="currentDisplay"></h2>
-  </div>
+<a href="/logout">Logout</a>
 
-  <div class="nav">
-    <a href="/index.html">Patient Page</a>
-  </div>
-
-  <script src="script.js"></script>
-</body>
-</html>
+<script>
+fetch("/appointments")
+  .then(res => res.json())
+  .then(data => {
+    const list = document.getElementById("appointments");
+    data.forEach(a => {
+      list.innerHTML += `
+        <li>
+          ${a.date} ${a.time} -
+          ${a.patient} -
+          ${a.reason} -
+          ${a.status}
+        </li>
+      `;
+    });
+  });
+</script>

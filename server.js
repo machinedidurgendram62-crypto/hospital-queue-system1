@@ -20,31 +20,20 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const usersFile = "./users.json";
 const queueFile = "./queue.json";
+const appointmentFile = "./appointments.json";
 
-/* ---------- Helpers ---------- */
+/* ---------------- HELPERS ---------------- */
 
-function readUsers() {
+function read(file, defaultValue) {
   try {
-    return JSON.parse(fs.readFileSync(usersFile));
+    return JSON.parse(fs.readFileSync(file));
   } catch {
-    return [];
+    return defaultValue;
   }
 }
 
-function saveUsers(users) {
-  fs.writeFileSync(usersFile, JSON.stringify(users, null, 2));
-}
-
-function readQueue() {
-  try {
-    return JSON.parse(fs.readFileSync(queueFile));
-  } catch {
-    return { current: 0, lastToken: 0 };
-  }
-}
-
-function saveQueue(data) {
-  fs.writeFileSync(queueFile, JSON.stringify(data, null, 2));
+function write(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2));
 }
 
 function requireLogin(req, res, next) {
@@ -60,35 +49,34 @@ function requireRole(role) {
   };
 }
 
-/* ---------- Registration ---------- */
+/* ---------------- REGISTRATION ---------------- */
 
 app.post("/register", (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, department } = req.body;
 
-  let users = readUsers();
+  let users = read(usersFile, []);
 
-  if (users.find((u) => u.username === username)) {
+  if (users.find((u) => u.username === username))
     return res.send("User already exists ❌");
-  }
 
   users.push({
     username,
     password,
     role: "patient",
+    department,
     tokens: []
   });
 
-  saveUsers(users);
-
+  write(usersFile, users);
   res.redirect("/login.html");
 });
 
-/* ---------- Login ---------- */
+/* ---------------- LOGIN ---------------- */
 
 app.post("/login", (req, res) => {
   const { username, password } = req.body;
 
-  const users = readUsers();
+  const users = read(usersFile, []);
   const user = users.find(
     (u) => u.username === username && u.password === password
   );
@@ -102,82 +90,84 @@ app.post("/login", (req, res) => {
   return res.redirect("/patient");
 });
 
-/* ---------- Logout ---------- */
+/* ---------------- LOGOUT ---------------- */
 
 app.get("/logout", (req, res) => {
   req.session.destroy();
   res.redirect("/login.html");
 });
 
-/* ---------- Protected Pages ---------- */
+/* ---------------- APPOINTMENTS ---------------- */
 
-app.get("/patient", requireLogin, requireRole("patient"), (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "patient.html"));
-});
+app.post("/book", requireLogin, requireRole("patient"), (req, res) => {
+  const { date, time, reason } = req.body;
 
-app.get("/doctor", requireLogin, requireRole("doctor"), (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "doctor.html"));
-});
+  let appointments = read(appointmentFile, []);
 
-app.get("/admin", requireLogin, requireRole("admin"), (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "admin.html"));
-});
-
-/* ---------- Queue ---------- */
-
-app.post("/token", requireLogin, requireRole("patient"), (req, res) => {
-  let queue = readQueue();
-  queue.lastToken += 1;
-  saveQueue(queue);
-
-  let users = readUsers();
-  const user = users.find((u) => u.username === req.session.user.username);
-
-  user.tokens.push({
-    token: queue.lastToken,
-    date: new Date().toLocaleString()
+  appointments.push({
+    id: Date.now(),
+    patient: req.session.user.username,
+    department: req.session.user.department,
+    date,
+    time,
+    reason,
+    status: "Pending"
   });
 
-  saveUsers(users);
+  write(appointmentFile, appointments);
+  res.redirect("/patient");
+});
 
-  res.json({
-    tokenNumber: queue.lastToken,
-    position: queue.lastToken - queue.current,
-    waitingTime: (queue.lastToken - queue.current) * 5
+app.get("/myAppointments", requireLogin, requireRole("patient"), (req, res) => {
+  const appointments = read(appointmentFile, []);
+  res.json(
+    appointments.filter(
+      (a) => a.patient === req.session.user.username
+    )
+  );
+});
+
+app.get("/appointments", requireLogin, requireRole("doctor"), (req, res) => {
+  const appointments = read(appointmentFile, []);
+  res.json(
+    appointments.filter(
+      (a) => a.department === req.session.user.department
+    )
+  );
+});
+
+app.post("/approve/:id", requireLogin, requireRole("doctor"), (req, res) => {
+  let appointments = read(appointmentFile, []);
+  const id = parseInt(req.params.id);
+
+  appointments = appointments.map(a => {
+    if (a.id === id) a.status = "Approved";
+    return a;
   });
+
+  write(appointmentFile, appointments);
+  res.redirect("/doctor");
 });
 
-app.get("/status", (req, res) => {
-  const queue = readQueue();
-  res.json(queue);
-});
-
-app.post("/next", requireLogin, requireRole("doctor"), (req, res) => {
-  let queue = readQueue();
-  if (queue.current < queue.lastToken) {
-    queue.current += 1;
-    saveQueue(queue);
-  }
-  res.json(queue);
-});
-
-/* ---------- Token History ---------- */
-
-app.get("/history", requireLogin, requireRole("patient"), (req, res) => {
-  const users = readUsers();
-  const user = users.find((u) => u.username === req.session.user.username);
-  res.json(user.tokens);
-});
-
-/* ---------- Admin Dashboard ---------- */
+/* ---------------- ADMIN ---------------- */
 
 app.get("/allUsers", requireLogin, requireRole("admin"), (req, res) => {
-  const users = readUsers();
-  res.json(users);
+  res.json(read(usersFile, []));
 });
+
+/* ---------------- PAGES ---------------- */
+
+app.get("/patient", requireLogin, requireRole("patient"), (req, res) =>
+  res.sendFile(path.join(__dirname, "public/patient.html"))
+);
+
+app.get("/doctor", requireLogin, requireRole("doctor"), (req, res) =>
+  res.sendFile(path.join(__dirname, "public/doctor.html"))
+);
+
+app.get("/admin", requireLogin, requireRole("admin"), (req, res) =>
+  res.sendFile(path.join(__dirname, "public/admin.html"))
+);
 
 const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log("Server running on port " + PORT);
-});
+app.listen(PORT, () => console.log("Server running..."));
